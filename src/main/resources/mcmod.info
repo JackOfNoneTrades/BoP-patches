@@ -1,0 +1,29 @@
+{
+  "modListVersion": 2,
+  "modList": [
+    {
+      "modid": "${modId}",
+      "name": "${modName}",
+      "description": "Applies bspatch-generated runtime patches on top of the official Biomes O' Plenty jar while keeping an editable upstream workspace for development.",
+      "version": "${modVersion}",
+      "mcversion": "${minecraftVersion}",
+      "url": "",
+      "updateUrl": "",
+      "authorList": [
+        "fentanylsolutions"
+      ],
+      "credits": "",
+      "logoFile": "",
+      "screenshots": [],
+      "parent": "",
+      "requiredMods": [
+        "BiomesOPlenty"
+      ],
+      "dependencies": [
+        "BiomesOPlenty"
+      ],
+      "dependants": [],
+      "useDependencyInformation": true
+    }
+  ]
+}

@@ -1,0 +1,235 @@
+import dev.jack.boppatches.build.BopPatchSettings
+import dev.jack.boppatches.build.BopRuntimePatchSupport
+import dev.jack.boppatches.build.BopWorkspaceSupport
+import org.gradle.api.tasks.bundling.Jar
+
+def bopSettings = BopPatchSettings.from(project)
+def generatedBopDir = layout.buildDirectory.dir("generated/boppatches")
+def clientRunDir = project.file("run/client").toPath()
+def serverRunDir = project.file("run/server").toPath()
+def obfuscatedRunDir = project.file("run/obfuscated").toPath()
+def modJarPrefix = project.property("modId").toString()
+def bopLibs = files({
+    fileTree(dir: bopSettings.getUpstreamDir().resolve("libs").toFile(), include: ["*.jar"])
+})
+def bopBuildProperties = new Properties()
+def bopBuildPropertiesFile = bopSettings.getUpstreamDir().resolve("build.properties").toFile()
+
+if (!providers.gradleProperty("skipAutoBootstrap").present && !bopSettings.getWorkspaceDir().toFile().exists()) {
+    BopWorkspaceSupport.ensureWorkspaceExists(project)
+}
+
+if (bopBuildPropertiesFile.exists()) {
+    bopBuildPropertiesFile.withInputStream { input -> bopBuildProperties.load(input) }
+}
+
+def bopResourceTokens = [
+        modid            : "BiomesOPlenty",
+        mod_version      : bopBuildProperties.getProperty("mod_version", "2.1.0"),
+        minecraft_version: bopBuildProperties.getProperty("minecraft_version", project.property("minecraftVersion").toString()),
+        build_number     : "[:]",
+        worldcore_version: bopBuildProperties.getProperty("worldcore_version", "")
+]
+def bopDevJarName = bopSettings.getOfficialJarName().replace(".jar", "-workspace-dev.jar")
+
+sourceSets {
+    main {
+        resources.srcDir(generatedBopDir.map { it.dir("patch-resources") }.get().asFile)
+    }
+
+    bopPatched {
+        java.srcDirs(
+                bopSettings.getWorkspaceDir().resolve("src/main/java").toFile(),
+                bopSettings.getWorkspaceDir().resolve("src/api/java").toFile())
+        resources.srcDir(bopSettings.getWorkspaceDir().resolve("src/main/resources").toFile())
+        compileClasspath += sourceSets.main.compileClasspath + bopLibs
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+dependencies {
+    bopPatchedCompileOnly(bopLibs)
+}
+
+def bopPatchedJar = tasks.register("bopPatchedJar", Jar) {
+    group = "bop patches"
+    description = "Builds a deobfuscated Biomes O' Plenty workspace jar for dev runs."
+    archiveBaseName.set("BiomesOPlenty")
+    archiveClassifier.set("workspace-dev")
+    from(sourceSets.bopPatched.output)
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+def reobfBopPatchedJar = tasks.named("reobfBopPatchedJar")
+
+tasks.register("bootstrapBopWorkspace") {
+    group = "bop patches"
+    description = "Clones the upstream BOP branch and creates the editable bop-src workspace if needed."
+    doLast {
+        BopWorkspaceSupport.ensureWorkspaceExists(project)
+    }
+}
+
+tasks.register("refreshBopWorkspace") {
+    group = "bop patches"
+    description = "Rebuilds bop-src from upstream plus the committed source overrides."
+    doLast {
+        BopWorkspaceSupport.refreshWorkspace(project)
+    }
+}
+
+tasks.register("updateBopUpstream") {
+    group = "bop patches"
+    description = "Re-clones the configured BOP upstream branch into .bop/upstream."
+    doLast {
+        BopWorkspaceSupport.updateUpstream(project)
+    }
+}
+
+tasks.register("captureBopWorkspace") {
+    group = "bop patches"
+    description = "Writes the changed bop-src files back into patches/source-overrides and patches/deletions.txt."
+    doLast {
+        BopWorkspaceSupport.captureWorkspace(project)
+    }
+}
+
+tasks.register("downloadOfficialBopJar") {
+    group = "bop patches"
+    description = "Downloads the official BOP universal jar used as the runtime patch base."
+    doLast {
+        BopWorkspaceSupport.downloadOfficialJar(project)
+    }
+}
+
+tasks.register("generateBopRuntimeArtifacts") {
+    group = "bop patches"
+    description = "Builds BOP workspace jars and generates the whole-jar runtime bspatch payload."
+    dependsOn("bootstrapBopWorkspace", "downloadOfficialBopJar", bopPatchedJar, reobfBopPatchedJar)
+    inputs.dir(bopSettings.getWorkspaceDir().resolve("src/main/java").toFile())
+    inputs.dir(bopSettings.getWorkspaceDir().resolve("src/api/java").toFile())
+    inputs.dir(bopSettings.getWorkspaceDir().resolve("src/main/resources").toFile())
+    inputs.file(bopSettings.getOfficialJarPath().toFile())
+    inputs.file(bopPatchedJar.flatMap { it.archiveFile })
+    inputs.file(reobfBopPatchedJar.flatMap { it.archiveFile })
+    outputs.dir(generatedBopDir)
+    doLast {
+        BopRuntimePatchSupport.generate(
+                project,
+                bopPatchedJar.get().archiveFile.get().asFile.toPath(),
+                reobfBopPatchedJar.get().archiveFile.get().asFile.toPath(),
+                generatedBopDir.get().asFile.toPath())
+    }
+}
+
+tasks.register("generateBopPatches") {
+    group = "bop patches"
+    description = "Captures the current bop-src edits into commit-friendly source overrides and refreshes runtime artifacts."
+    dependsOn("generateBopRuntimeArtifacts")
+    doLast {
+        BopWorkspaceSupport.captureWorkspace(project)
+    }
+}
+
+tasks.register("prepareClientBopMods") {
+    group = "bop patches"
+    description = "Copies the deobfuscated BOP workspace jar into the client run directory."
+    dependsOn(bopPatchedJar)
+    doLast {
+        BopWorkspaceSupport.prepareRunDirectory(
+                project,
+                clientRunDir,
+                bopPatchedJar.get().archiveFile.get().asFile.toPath(),
+                bopDevJarName,
+                modJarPrefix)
+    }
+}
+
+tasks.register("prepareServerBopMods") {
+    group = "bop patches"
+    description = "Copies the deobfuscated BOP workspace jar into the server run directory."
+    dependsOn(bopPatchedJar)
+    doLast {
+        BopWorkspaceSupport.prepareRunDirectory(
+                project,
+                serverRunDir,
+                bopPatchedJar.get().archiveFile.get().asFile.toPath(),
+                bopDevJarName,
+                modJarPrefix)
+    }
+}
+
+tasks.register("prepareObfuscatedClientBopMods") {
+    group = "bop patches"
+    description = "Mirrors the staged obfuscated mods into the client run directory and restores the official BOP jar there."
+    dependsOn("downloadOfficialBopJar", "prepareObfModsFolder")
+    doLast {
+        BopWorkspaceSupport.prepareMirroredObfuscatedRunDirectory(
+                project,
+                obfuscatedRunDir,
+                clientRunDir,
+                bopSettings.getOfficialJarPath(),
+                bopSettings.getOfficialJarName(),
+                modJarPrefix)
+    }
+}
+
+tasks.register("prepareObfuscatedServerBopMods") {
+    group = "bop patches"
+    description = "Mirrors the staged obfuscated mods into the server run directory and restores the official BOP jar there."
+    dependsOn("downloadOfficialBopJar", "prepareObfModsFolder")
+    doLast {
+        BopWorkspaceSupport.prepareMirroredObfuscatedRunDirectory(
+                project,
+                obfuscatedRunDir,
+                serverRunDir,
+                bopSettings.getOfficialJarPath(),
+                bopSettings.getOfficialJarName(),
+                modJarPrefix)
+    }
+}
+
+tasks.named("compileBopPatchedJava").configure {
+    dependsOn("bootstrapBopWorkspace")
+}
+
+tasks.named("processBopPatchedResources").configure {
+    dependsOn("bootstrapBopWorkspace")
+    inputs.properties(bopResourceTokens)
+    filesMatching(["**/*.info", "**/*.properties"]) {
+        expand(bopResourceTokens)
+    }
+}
+
+reobfBopPatchedJar.configure {
+    archiveClassifier.set("workspace-runtime")
+}
+
+tasks.matching { it.name.startsWith("runClient") }.configureEach {
+    dependsOn("generateBopRuntimeArtifacts", "prepareClientBopMods")
+}
+
+tasks.matching { it.name.startsWith("runServer") }.configureEach {
+    dependsOn("generateBopRuntimeArtifacts", "prepareServerBopMods")
+}
+
+tasks.named("runObfClient").configure {
+    dependsOn("generateBopRuntimeArtifacts", "prepareObfuscatedClientBopMods")
+}
+
+tasks.named("runObfServer").configure {
+    dependsOn("generateBopRuntimeArtifacts", "prepareObfuscatedServerBopMods")
+}
+
+tasks.matching { it.name == "checkstyleBopPatched" }.configureEach {
+    enabled = false
+}
+
+tasks.named("processResources").configure {
+    dependsOn("generateBopRuntimeArtifacts")
+}
+
+tasks.named("jar").configure {
+    dependsOn("generateBopRuntimeArtifacts")
+}
