@@ -1,5 +1,6 @@
 package dev.jack.boppatches.build;
 
+import java.io.ByteArrayOutputStream;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
@@ -16,8 +17,6 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -52,13 +51,8 @@ public final class BopWorkspaceSupport {
                     copyTree(upstreamRoot, settings.getWorkspaceDir().resolve(root));
                 }
             }
-            Path overridesDir = settings.getSourceOverridesDir();
-            if (Files.exists(overridesDir)) {
-                copyTree(overridesDir, settings.getWorkspaceDir());
-            }
-            for (String deletion : readDeletions(settings)) {
-                deleteRecursively(settings.getWorkspaceDir().resolve(deletion));
-            }
+            applyWorkspacePatch(logger, settings);
+            verifyWorkspacePatchApplied(project, settings);
         } catch (IOException exception) {
             throw new GradleException("Failed to refresh BOP workspace", exception);
         }
@@ -78,51 +72,52 @@ public final class BopWorkspaceSupport {
         ensureWorkspaceExists(project);
 
         Path workspaceDir = settings.getWorkspaceDir();
-        Path upstreamDir = settings.getUpstreamDir();
-        Path overridesDir = settings.getSourceOverridesDir();
-        Path deletionsFile = settings.getDeletionsFile();
+        Path workspacePatchFile = settings.getWorkspacePatchFile();
+        Path patchDir = settings.getPatchDir();
 
         try {
-            deleteRecursively(overridesDir);
-            Files.createDirectories(overridesDir);
-            Files.createDirectories(deletionsFile.getParent());
+            Files.createDirectories(patchDir);
+            deleteLegacyPatchArtifacts(settings);
 
-            Set<String> deletions = new TreeSet<>();
-            Set<String> seenFiles = new HashSet<>();
+            Path tempRoot = Files.createTempDirectory(settings.getMetadataRoot(), "workspace-diff-");
+            try {
+                String upstreamSnapshotName = "__upstream_snapshot__";
+                String workspaceSnapshotName = "__workspace_snapshot__";
+                Path tempUpstream = tempRoot.resolve(upstreamSnapshotName);
+                Path tempWorkspace = tempRoot.resolve(workspaceSnapshotName);
+                populatePatchSnapshot(settings.getUpstreamDir(), tempUpstream, settings.getWorkspaceRoots());
+                populatePatchSnapshot(workspaceDir, tempWorkspace, settings.getWorkspaceRoots());
 
-            for (String root : settings.getWorkspaceRoots()) {
-                Path workspaceRoot = workspaceDir.resolve(root);
-                Path upstreamRoot = upstreamDir.resolve(root);
-                Set<Path> paths = new TreeSet<>();
-                paths.addAll(collectRelativeFiles(workspaceRoot));
-                paths.addAll(collectRelativeFiles(upstreamRoot));
+                CommandResult diffResult = runCommand(
+                        tempRoot,
+                        List.of(
+                                "git",
+                                "-c",
+                                "core.safecrlf=false",
+                                "-c",
+                                "core.autocrlf=false",
+                                "diff",
+                                "--no-index",
+                                "--binary",
+                                "--full-index",
+                                "--no-color",
+                                "--src-prefix=upstream/",
+                                "--dst-prefix=workspace/",
+                                upstreamSnapshotName,
+                                workspaceSnapshotName),
+                        Set.of(0, 1));
 
-                for (Path relativePath : paths) {
-                    Path workspaceFile = workspaceRoot.resolve(relativePath);
-                    Path upstreamFile = upstreamRoot.resolve(relativePath);
-                    String rel = root + "/" + normalize(relativePath);
-                    seenFiles.add(rel);
-                    if (Files.exists(workspaceFile) && Files.exists(upstreamFile)) {
-                        if (!contentEquals(workspaceFile, upstreamFile)) {
-                            copyFile(workspaceFile, overridesDir.resolve(rel));
-                        }
-                    } else if (Files.exists(workspaceFile)) {
-                        copyFile(workspaceFile, overridesDir.resolve(rel));
-                    } else if (Files.exists(upstreamFile)) {
-                        deletions.add(rel);
-                    }
-                }
+                String workspacePatch = diffResult.exitCode() == 0
+                        ? ""
+                        : sanitizeWorkspacePatch(diffResult.output(), upstreamSnapshotName, workspaceSnapshotName);
+                Files.writeString(workspacePatchFile, workspacePatch, StandardCharsets.UTF_8);
+                logger.lifecycle(
+                        "Captured {} changed file(s) from bop-src into {}",
+                        countPatchEntries(workspacePatch),
+                        workspacePatchFile);
+            } finally {
+                deleteRecursively(tempRoot);
             }
-
-            if (isDirectoryEmpty(overridesDir)) {
-                Files.writeString(overridesDir.resolve(".gitkeep"), "", StandardCharsets.UTF_8);
-            }
-
-            Files.write(deletionsFile, deletions, StandardCharsets.UTF_8);
-            logger.lifecycle(
-                    "Captured {} override file(s) and {} deletion(s) from bop-src",
-                    countFiles(overridesDir),
-                    deletions.size());
         } catch (IOException exception) {
             throw new GradleException("Failed to capture BOP workspace changes", exception);
         }
@@ -278,7 +273,59 @@ public final class BopWorkspaceSupport {
                         upstreamDir.toString()));
     }
 
-    private static void runCommand(Path workingDirectory, List<String> command) {
+    private static void applyWorkspacePatch(Logger logger, BopPatchSettings settings) throws IOException {
+        Path workspacePatchFile = settings.getWorkspacePatchFile();
+        if (!Files.exists(workspacePatchFile) || Files.size(workspacePatchFile) == 0L) {
+            return;
+        }
+
+        logger.lifecycle("Applying committed BOP workspace patch {}", workspacePatchFile);
+        runCommand(
+                settings.getProjectDir(),
+                List.of(
+                        "git",
+                        "apply",
+                        "--whitespace=nowarn",
+                        "--directory=" + settings.getProjectDir().relativize(settings.getWorkspaceDir()),
+                        "-p1",
+                        workspacePatchFile.toAbsolutePath().toString()));
+    }
+
+    private static void verifyWorkspacePatchApplied(Project project, BopPatchSettings settings) throws IOException {
+        Path workspacePatchFile = settings.getWorkspacePatchFile();
+        if (!Files.exists(workspacePatchFile) || Files.size(workspacePatchFile) == 0L) {
+            return;
+        }
+
+        BopWorkspaceDiff diff = diffWorkspace(project);
+        if (!hasWorkspaceChanges(diff)) {
+            throw new GradleException(
+                    "The committed workspace patch was applied, but no BOP workspace changes were detected afterward. "
+                            + "This usually means git applied the patch relative to the wrong directory.");
+        }
+    }
+
+    private static void populatePatchSnapshot(Path sourceRoot, Path targetRoot, List<String> workspaceRoots)
+            throws IOException {
+        Files.createDirectories(targetRoot);
+        for (String root : workspaceRoots) {
+            Path sourcePath = sourceRoot.resolve(root);
+            if (Files.exists(sourcePath)) {
+                copyTree(sourcePath, targetRoot.resolve(root));
+            }
+        }
+    }
+
+    private static void deleteLegacyPatchArtifacts(BopPatchSettings settings) throws IOException {
+        deleteRecursively(settings.getPatchDir().resolve("source-overrides"));
+        Files.deleteIfExists(settings.getPatchDir().resolve("deletions.txt"));
+    }
+
+    private static CommandResult runCommand(Path workingDirectory, List<String> command) {
+        return runCommand(workingDirectory, command, Set.of(0));
+    }
+
+    private static CommandResult runCommand(Path workingDirectory, List<String> command, Set<Integer> allowedExitCodes) {
         try {
             Process process = new ProcessBuilder(command)
                     .directory(workingDirectory.toFile())
@@ -286,18 +333,90 @@ public final class BopWorkspaceSupport {
                     .start();
             String output;
             try (InputStream input = process.getInputStream()) {
-                output = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+                output = readFully(input);
             }
             int exitCode = process.waitFor();
-            if (exitCode != 0) {
+            if (!allowedExitCodes.contains(exitCode)) {
                 throw new GradleException("Command failed (" + String.join(" ", command) + "):\n" + output.trim());
             }
+            return new CommandResult(exitCode, output);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new GradleException("Failed to run command: " + String.join(" ", command), exception);
         } catch (IOException exception) {
             throw new GradleException("Failed to run command: " + String.join(" ", command), exception);
         }
+    }
+
+    private static String readFully(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[16 * 1024];
+        int read;
+        while ((read = input.read(buffer)) >= 0) {
+            output.write(buffer, 0, read);
+        }
+        return new String(output.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    private static int countPatchEntries(String patchText) {
+        if (patchText.trim().isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (String line : patchText.split("\\R")) {
+            if (line.startsWith("diff --git ")) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static boolean hasWorkspaceChanges(BopWorkspaceDiff diff) {
+        return !diff.getOverlayClassPrefixes().isEmpty()
+                || !diff.getDeletedClassPrefixes().isEmpty()
+                || !diff.getOverlayResources().isEmpty()
+                || !diff.getDeletedResources().isEmpty();
+    }
+
+    private static String sanitizeWorkspacePatch(
+            String rawPatch,
+            String upstreamSnapshotName,
+            String workspaceSnapshotName) {
+        if (rawPatch.trim().isEmpty()) {
+            return "";
+        }
+
+        String upstreamPrefix = "upstream/" + upstreamSnapshotName + "/";
+        String workspacePrefix = "workspace/" + workspaceSnapshotName + "/";
+        StringBuilder builder = new StringBuilder(rawPatch.length());
+        boolean firstLine = true;
+        for (String line : rawPatch.split("\\R")) {
+            if (line.startsWith("warning: ")) {
+                continue;
+            }
+            String sanitizedLine = line;
+            if (line.startsWith("diff --git ")
+                    || line.startsWith("--- ")
+                    || line.startsWith("+++ ")
+                    || line.startsWith("Binary files ")
+                    || line.startsWith("rename from ")
+                    || line.startsWith("rename to ")
+                    || line.startsWith("copy from ")
+                    || line.startsWith("copy to ")) {
+                sanitizedLine = sanitizedLine.replace(upstreamPrefix, "upstream/")
+                        .replace(workspacePrefix, "workspace/");
+            }
+            if (!firstLine) {
+                builder.append('\n');
+            }
+            builder.append(sanitizedLine);
+            firstLine = false;
+        }
+        if (builder.length() == 0) {
+            return "";
+        }
+        builder.append('\n');
+        return builder.toString();
     }
 
     static Set<Path> collectRelativeFiles(Path root) throws IOException {
@@ -310,26 +429,6 @@ public final class BopWorkspaceSupport {
                     .forEach(path -> files.add(root.relativize(path)));
         }
         return files;
-    }
-
-    private static List<String> readDeletions(BopPatchSettings settings) {
-        Path deletionsFile = settings.getDeletionsFile();
-        if (!Files.exists(deletionsFile)) {
-            return List.of();
-        }
-        try {
-            List<String> lines = Files.readAllLines(deletionsFile, StandardCharsets.UTF_8);
-            List<String> result = new ArrayList<>();
-            for (String line : lines) {
-                String trimmed = line.trim();
-                if (!trimmed.isEmpty()) {
-                    result.add(trimmed);
-                }
-            }
-            return result;
-        } catch (IOException exception) {
-            throw new GradleException("Failed to read BOP deletions manifest", exception);
-        }
     }
 
     static boolean contentEquals(Path left, Path right) throws IOException {
@@ -365,26 +464,6 @@ public final class BopWorkspaceSupport {
             throw new IllegalArgumentException("Expected a Java source file but got " + normalized);
         }
         return normalized.substring(0, normalized.length() - ".java".length());
-    }
-
-    private static boolean isDirectoryEmpty(Path path) throws IOException {
-        if (!Files.exists(path)) {
-            return true;
-        }
-        try (var stream = Files.walk(path)) {
-            return stream.noneMatch(candidate -> Files.isRegularFile(candidate));
-        }
-    }
-
-    private static int countFiles(Path path) throws IOException {
-        if (!Files.exists(path)) {
-            return 0;
-        }
-        try (var stream = Files.walk(path)) {
-            return (int) stream.filter(Files::isRegularFile)
-                    .filter(candidate -> !candidate.getFileName().toString().equals(".gitkeep"))
-                    .count();
-        }
     }
 
     static void copyTree(Path from, Path to) throws IOException {
@@ -471,5 +550,24 @@ public final class BopWorkspaceSupport {
             builder.append(String.format("%02x", value));
         }
         return builder.toString();
+    }
+
+    private static final class CommandResult {
+
+        private final int exitCode;
+        private final String output;
+
+        private CommandResult(int exitCode, String output) {
+            this.exitCode = exitCode;
+            this.output = output;
+        }
+
+        private int exitCode() {
+            return exitCode;
+        }
+
+        private String output() {
+            return output;
+        }
     }
 }

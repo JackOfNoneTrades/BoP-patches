@@ -73,7 +73,7 @@ tasks.register("bootstrapBopWorkspace") {
 
 tasks.register("refreshBopWorkspace") {
     group = "bop patches"
-    description = "Rebuilds bop-src from upstream plus the committed source overrides."
+    description = "Rebuilds bop-src from upstream and reapplies patches/workspace.patch."
     doLast {
         BopWorkspaceSupport.refreshWorkspace(project)
     }
@@ -89,7 +89,7 @@ tasks.register("updateBopUpstream") {
 
 tasks.register("captureBopWorkspace") {
     group = "bop patches"
-    description = "Writes the changed bop-src files back into patches/source-overrides and patches/deletions.txt."
+    description = "Writes the changed bop-src files into patches/workspace.patch."
     doLast {
         BopWorkspaceSupport.captureWorkspace(project)
     }
@@ -125,7 +125,7 @@ tasks.register("generateBopRuntimeArtifacts") {
 
 tasks.register("generateBopPatches") {
     group = "bop patches"
-    description = "Captures the current bop-src edits into commit-friendly source overrides and refreshes runtime artifacts."
+    description = "Captures the current bop-src edits into patches/workspace.patch and refreshes runtime artifacts."
     dependsOn("generateBopRuntimeArtifacts")
     doLast {
         BopWorkspaceSupport.captureWorkspace(project)

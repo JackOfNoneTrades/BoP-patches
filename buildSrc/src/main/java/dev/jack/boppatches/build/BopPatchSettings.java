@@ -102,11 +102,11 @@ public final class BopPatchSettings {
         return projectDir.resolve("bop-src");
     }
 
-    public Path getSourceOverridesDir() {
-        return projectDir.resolve("patches").resolve("source-overrides");
+    public Path getPatchDir() {
+        return projectDir.resolve("patches");
     }
 
-    public Path getDeletionsFile() {
-        return projectDir.resolve("patches").resolve("deletions.txt");
+    public Path getWorkspacePatchFile() {
+        return getPatchDir().resolve("workspace.patch");
     }
 }

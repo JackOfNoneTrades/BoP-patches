@@ -10,19 +10,19 @@ import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 
 @Mod(
-        modid = BopPatchesMod.MOD_ID,
-        name = "BOP Patches",
-        version = Tags.VERSION,
-        dependencies = "required-after:BiomesOPlenty",
-        acceptedMinecraftVersions = "[1.7.10]")
+    modid = BopPatchesMod.MOD_ID,
+    name = "BOP Patches",
+    version = Tags.VERSION,
+    dependencies = "required-after:BiomesOPlenty",
+    acceptedMinecraftVersions = "[1.7.10]")
 public class BopPatchesMod {
 
     public static final String MOD_ID = "boppatches";
     public static final Logger LOG = LogManager.getLogger(MOD_ID);
 
     @SidedProxy(
-            clientSide = "org.fentanylsolutions.boppatches.ClientProxy",
-            serverSide = "org.fentanylsolutions.boppatches.CommonProxy")
+        clientSide = "org.fentanylsolutions.boppatches.ClientProxy",
+        serverSide = "org.fentanylsolutions.boppatches.CommonProxy")
     public static CommonProxy proxy;
 
     @Mod.EventHandler

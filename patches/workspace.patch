@@ -1,0 +1,123 @@
+diff --git upstream/src/main/java/biomesoplenty/BiomesOPlenty.java workspace/src/main/java/biomesoplenty/BiomesOPlenty.java
+index 5409aea6d6703775b33dab8aa21131bf3bcb69cd..1ce7792ba34a9c327e927fc12e49a56df15d9ef5 100644
+--- upstream/src/main/java/biomesoplenty/BiomesOPlenty.java
++++ workspace/src/main/java/biomesoplenty/BiomesOPlenty.java
+@@ -28,6 +28,8 @@ import cpw.mods.fml.common.SidedProxy;
+ import cpw.mods.fml.common.event.FMLInitializationEvent;
+ import cpw.mods.fml.common.event.FMLPostInitializationEvent;
+ import cpw.mods.fml.common.event.FMLPreInitializationEvent;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
+ 
+ @Mod(modid = BOPModInfo.modID, name = BOPModInfo.modName, dependencies = "after:Natura; required-after:Forge@[10.13.4.1566,)")
+ public class BiomesOPlenty
+@@ -40,6 +42,7 @@ public class BiomesOPlenty
+     
+     public static CreativeTabs tabBiomesOPlenty;
+     public static String configPath;
++    public static final Logger LOG = LogManager.getLogger(BOPModInfo.modID);
+     
+     @EventHandler
+     public void preInit(FMLPreInitializationEvent event)
+@@ -63,6 +66,14 @@ public class BiomesOPlenty
+         BOPEventHandlers.init();
+         proxy.registerRenderers();
+         BOPIntegration.preInit();
++        LOG.info("\n  /$$$$$$  /$$   /$$ /$$$$$$$$ /$$$$$$$$ /$$$$$$$ \n" +
++            " /$$__  $$| $$$ | $$| $$_____/| $$_____/| $$__  $$\n" +
++            "| $$  \\__/| $$$$| $$| $$      | $$      | $$  \\ $$\n" +
++            "|  $$$$$$ | $$ $$ $$| $$$$$   | $$$$$   | $$  | $$\n" +
++            " \\____  $$| $$  $$$$| $$__/   | $$__/   | $$  | $$\n" +
++            " /$$  \\ $$| $$\\  $$$| $$      | $$      | $$  | $$\n" +
++            "|  $$$$$$/| $$ \\  $$| $$$$$$$$| $$$$$$$$| $$$$$$$/\n" +
++            " \\______/ |__/  \\__/|________/|________/|_______/ \n");
+     }
+     
+     @EventHandler
+@@ -78,4 +89,4 @@ public class BiomesOPlenty
+     	BOPIntegration.postInit();
+         BOPBiomes.worldTypeBOP = new WorldTypeBOP();
+     }
+-}
+\ No newline at end of file
++}
+diff --git upstream/src/main/java/biomesoplenty/common/world/WorldChunkManagerBOPEnd.java workspace/src/main/java/biomesoplenty/common/world/WorldChunkManagerBOPEnd.java
+index 5e085c83f5f220cc6d52c09b3e5bf9b05d21a0a4..6b7a19afc96aacd070f634c46d4e5f10c156ee29 100644
+--- upstream/src/main/java/biomesoplenty/common/world/WorldChunkManagerBOPEnd.java
++++ workspace/src/main/java/biomesoplenty/common/world/WorldChunkManagerBOPEnd.java
+@@ -14,8 +14,6 @@ public class WorldChunkManagerBOPEnd extends WorldChunkManager
+     private BiomeGenBase biomeGenerator;
+     /** The rainfall in the world */
+     private float rainfall;
+-    private static final String __OBFID = "CL_00000169";
+-
+     public WorldChunkManagerBOPEnd()
+     {
+         this.biomeGenerator = BiomeGenBase.sky;
+@@ -94,4 +92,4 @@ public class WorldChunkManagerBOPEnd extends WorldChunkManager
+     {
+         return p_76940_4_.contains(this.biomeGenerator);
+     }
+-}
+\ No newline at end of file
++}
+diff --git upstream/src/main/java/biomesoplenty/common/world/features/WorldGenBOPBlob.java workspace/src/main/java/biomesoplenty/common/world/features/WorldGenBOPBlob.java
+index 8220226c1acb63624772c976a83c76691cfcc903..44803c14015520a41b613acbdef5a19e9bac4743 100644
+--- upstream/src/main/java/biomesoplenty/common/world/features/WorldGenBOPBlob.java
++++ workspace/src/main/java/biomesoplenty/common/world/features/WorldGenBOPBlob.java
+@@ -12,8 +12,6 @@ public class WorldGenBOPBlob extends WorldGeneratorBOP
+ {
+     private Block field_150545_a;
+     private int field_150544_b;
+-    private static final String __OBFID = "CL_00000402";
+-
+     public WorldGenBOPBlob(Block p_i45450_1_, int p_i45450_2_)
+     {
+         super(false);
+@@ -97,4 +95,4 @@ public class WorldGenBOPBlob extends WorldGeneratorBOP
+ 			this.generate(world, random, randX, randY, randZ);
+ 		}
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git upstream/src/main/java/biomesoplenty/common/world/features/WorldGenSandstoneSpike.java workspace/src/main/java/biomesoplenty/common/world/features/WorldGenSandstoneSpike.java
+index 58d5df36f9c7dfed81464295b7bd8755cb81826e..d8db158d480fe15e115c85ec310bc56c024d5957 100644
+--- upstream/src/main/java/biomesoplenty/common/world/features/WorldGenSandstoneSpike.java
++++ workspace/src/main/java/biomesoplenty/common/world/features/WorldGenSandstoneSpike.java
+@@ -12,8 +12,6 @@ import biomesoplenty.common.world.generation.WorldGeneratorBOP;
+ 
+ public class WorldGenSandstoneSpike extends WorldGeneratorBOP
+ {
+-    private static final String __OBFID = "CL_00000417";
+-
+     @Override
+     public boolean generate(World par1World, Random par2Random, int par3, int par4, int par5)
+     {
+@@ -141,4 +139,4 @@ public class WorldGenSandstoneSpike extends WorldGeneratorBOP
+             this.generate(world, random, randX, randY, randZ);
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git upstream/src/main/java/biomesoplenty/common/world/features/trees/WorldGenBOPJungle.java workspace/src/main/java/biomesoplenty/common/world/features/trees/WorldGenBOPJungle.java
+index e6df72fd1940b07eeac414f0c470c9a2dea85ebc..cabb4149c0ecf52747370bb16179e88101164fda 100644
+--- upstream/src/main/java/biomesoplenty/common/world/features/trees/WorldGenBOPJungle.java
++++ workspace/src/main/java/biomesoplenty/common/world/features/trees/WorldGenBOPJungle.java
+@@ -11,8 +11,6 @@ import biomesoplenty.api.content.BOPCBlocks;
+ 
+ public class WorldGenBOPJungle extends WorldGenHugeTrees
+ {
+-    private static final String __OBFID = "CL_00000420";
+-
+     public WorldGenBOPJungle(boolean p_i45456_1_, int p_i45456_2_, int p_i45456_3_, int p_i45456_4_, int p_i45456_5_)
+     {
+         super(p_i45456_1_, p_i45456_2_, p_i45456_3_, p_i45456_4_, p_i45456_5_);
+@@ -154,4 +152,4 @@ public class WorldGenBOPJungle extends WorldGenHugeTrees
+             this.func_150535_a(p_150543_1_, p_150543_2_, i1, p_150543_3_, p_150543_5_ + 1 - j1, p_150543_6_);
+         }
+     }
+-}
+\ No newline at end of file
++}

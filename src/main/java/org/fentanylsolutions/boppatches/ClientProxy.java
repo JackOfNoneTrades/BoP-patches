@@ -1,3 +1,4 @@
 package org.fentanylsolutions.boppatches;
 
-public class ClientProxy extends CommonProxy {}
+public class ClientProxy extends CommonProxy {
+}

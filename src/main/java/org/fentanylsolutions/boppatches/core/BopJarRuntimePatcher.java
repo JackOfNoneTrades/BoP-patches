@@ -57,7 +57,9 @@ public final class BopJarRuntimePatcher {
         }
 
         try {
-            Path backupJar = gameDir.resolve(".boppatches").resolve("official").resolve(officialJarName);
+            Path backupJar = gameDir.resolve(".boppatches")
+                .resolve("official")
+                .resolve(officialJarName);
             byte[] liveBytes = Files.readAllBytes(liveJar);
             String liveHash = Hashing.sha256(liveBytes);
             if (patchedSha256.equals(liveHash)) {
@@ -74,18 +76,18 @@ public final class BopJarRuntimePatcher {
                 String backupHash = Hashing.sha256(backupBytes);
                 if (!originalSha256.equals(backupHash)) {
                     LOG.error(
-                            "The stored official BOP backup {} has hash {} but {} is required",
-                            backupJar,
-                            backupHash,
-                            originalSha256);
+                        "The stored official BOP backup {} has hash {} but {} is required",
+                        backupJar,
+                        backupHash,
+                        originalSha256);
                     return;
                 }
                 originalBytes = backupBytes;
             } else {
                 LOG.error(
-                        "Cannot patch {} because its hash {} matches neither the expected official jar nor the patched jar",
-                        liveJar,
-                        liveHash);
+                    "Cannot patch {} because its hash {} matches neither the expected official jar nor the patched jar",
+                    liveJar,
+                    liveHash);
                 return;
             }
 
@@ -93,10 +95,7 @@ public final class BopJarRuntimePatcher {
             byte[] patchedBytes = applyPatch(originalBytes, patchBytes);
             String actualPatchedHash = Hashing.sha256(patchedBytes);
             if (!patchedSha256.equals(actualPatchedHash)) {
-                LOG.error(
-                        "Patched BOP jar hash mismatch: expected {}, got {}",
-                        patchedSha256,
-                        actualPatchedHash);
+                LOG.error("Patched BOP jar hash mismatch: expected {}, got {}", patchedSha256, actualPatchedHash);
                 return;
             }
 
@@ -109,7 +108,8 @@ public final class BopJarRuntimePatcher {
 
     private static Properties loadMetadata() {
         Properties properties = new Properties();
-        try (InputStream input = BopJarRuntimePatcher.class.getClassLoader().getResourceAsStream(PATCH_METADATA_PATH)) {
+        try (InputStream input = BopJarRuntimePatcher.class.getClassLoader()
+            .getResourceAsStream(PATCH_METADATA_PATH)) {
             if (input == null) {
                 LOG.warn("No bundled BOP jar patch metadata found at {}", PATCH_METADATA_PATH);
                 return properties;
@@ -129,10 +129,8 @@ public final class BopJarRuntimePatcher {
     }
 
     private static Path locateBopJar(Path gameDir, String officialJarName) {
-        Path[] searchRoots = new Path[] {
-                gameDir.resolve("mods"),
-                gameDir.resolve("mods").resolve("1.7.10")
-        };
+        Path[] searchRoots = new Path[] { gameDir.resolve("mods"), gameDir.resolve("mods")
+            .resolve("1.7.10") };
         for (Path root : searchRoots) {
             Path exactMatch = root.resolve(officialJarName);
             if (Files.exists(exactMatch)) {
@@ -146,12 +144,13 @@ public final class BopJarRuntimePatcher {
             }
             try (Stream<Path> stream = Files.list(root)) {
                 Path fallback = stream.filter(Files::isRegularFile)
-                        .filter(path -> {
-                            String fileName = path.getFileName().toString();
-                            return fileName.startsWith("BiomesOPlenty") && fileName.endsWith(".jar");
-                        })
-                        .findFirst()
-                        .orElse(null);
+                    .filter(path -> {
+                        String fileName = path.getFileName()
+                            .toString();
+                        return fileName.startsWith("BiomesOPlenty") && fileName.endsWith(".jar");
+                    })
+                    .findFirst()
+                    .orElse(null);
                 if (fallback != null) {
                     return fallback;
                 }
@@ -174,7 +173,8 @@ public final class BopJarRuntimePatcher {
     }
 
     private static byte[] readPatchBytes() {
-        try (InputStream input = BopJarRuntimePatcher.class.getClassLoader().getResourceAsStream(PATCH_RESOURCE_PATH)) {
+        try (InputStream input = BopJarRuntimePatcher.class.getClassLoader()
+            .getResourceAsStream(PATCH_RESOURCE_PATH)) {
             if (input == null) {
                 throw new IllegalStateException("Missing bundled BOP jar patch resource " + PATCH_RESOURCE_PATH);
             }
@@ -205,12 +205,14 @@ public final class BopJarRuntimePatcher {
     }
 
     private static void writeAtomically(Path target, byte[] bytes) throws IOException {
-        Path tempFile = target.resolveSibling(target.getFileName().toString() + ".boppatches.tmp");
+        Path tempFile = target.resolveSibling(
+            target.getFileName()
+                .toString() + ".boppatches.tmp");
         try (OutputStream output = Files.newOutputStream(
-                tempFile,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING,
-                StandardOpenOption.WRITE)) {
+            tempFile,
+            StandardOpenOption.CREATE,
+            StandardOpenOption.TRUNCATE_EXISTING,
+            StandardOpenOption.WRITE)) {
             output.write(bytes);
         }
         try {
