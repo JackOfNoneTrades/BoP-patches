@@ -233,3 +233,7 @@ tasks.named("processResources").configure {
 tasks.named("jar").configure {
     dependsOn("generateBopRuntimeArtifacts")
 }
+
+tasks.matching { it.name == "sourcesJar" }.configureEach {
+    dependsOn("generateBopRuntimeArtifacts")
+}
