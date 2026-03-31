@@ -1,17 +1,24 @@
 diff --git upstream/src/main/java/biomesoplenty/BiomesOPlenty.java workspace/src/main/java/biomesoplenty/BiomesOPlenty.java
-index 5409aea6d6703775b33dab8aa21131bf3bcb69cd..1ce7792ba34a9c327e927fc12e49a56df15d9ef5 100644
+index 5409aea6d6703775b33dab8aa21131bf3bcb69cd..d3916af2391447f1efd3ba9d6f0bf36b5e34dea2 100644
 --- upstream/src/main/java/biomesoplenty/BiomesOPlenty.java
 +++ workspace/src/main/java/biomesoplenty/BiomesOPlenty.java
-@@ -28,6 +28,8 @@ import cpw.mods.fml.common.SidedProxy;
+@@ -28,8 +28,14 @@ import cpw.mods.fml.common.SidedProxy;
  import cpw.mods.fml.common.event.FMLInitializationEvent;
  import cpw.mods.fml.common.event.FMLPostInitializationEvent;
  import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
  
- @Mod(modid = BOPModInfo.modID, name = BOPModInfo.modName, dependencies = "after:Natura; required-after:Forge@[10.13.4.1566,)")
+-@Mod(modid = BOPModInfo.modID, name = BOPModInfo.modName, dependencies = "after:Natura; required-after:Forge@[10.13.4.1566,)")
++@Mod(
++    modid = BOPModInfo.modID,
++    name = BOPModInfo.modName,
++    dependencies = "after:Natura; required-after:Forge@[10.13.4.1566,)",
++    guiFactory = "biomesoplenty.client.gui.GuiFactory")
  public class BiomesOPlenty
-@@ -40,6 +42,7 @@ public class BiomesOPlenty
+ {
+     @Instance("BiomesOPlenty")
+@@ -40,6 +46,7 @@ public class BiomesOPlenty
      
      public static CreativeTabs tabBiomesOPlenty;
      public static String configPath;
@@ -19,7 +26,7 @@ index 5409aea6d6703775b33dab8aa21131bf3bcb69cd..1ce7792ba34a9c327e927fc12e49a56d
      
      @EventHandler
      public void preInit(FMLPreInitializationEvent event)
-@@ -63,6 +66,14 @@ public class BiomesOPlenty
+@@ -63,6 +70,14 @@ public class BiomesOPlenty
          BOPEventHandlers.init();
          proxy.registerRenderers();
          BOPIntegration.preInit();
@@ -34,12 +41,164 @@ index 5409aea6d6703775b33dab8aa21131bf3bcb69cd..1ce7792ba34a9c327e927fc12e49a56d
      }
      
      @EventHandler
-@@ -78,4 +89,4 @@ public class BiomesOPlenty
+@@ -78,4 +93,4 @@ public class BiomesOPlenty
      	BOPIntegration.postInit();
          BOPBiomes.worldTypeBOP = new WorldTypeBOP();
      }
 -}
 \ No newline at end of file
++}
+diff --git upstream/__workspace_snapshot__/src/main/java/biomesoplenty/client/gui/GuiFactory.java workspace/src/main/java/biomesoplenty/client/gui/GuiFactory.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c2ba1865db167109a8e744c7b698d4e736fe25cf
+--- /dev/null
++++ workspace/src/main/java/biomesoplenty/client/gui/GuiFactory.java
+@@ -0,0 +1,146 @@
++package biomesoplenty.client.gui;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.List;
++import java.util.Set;
++
++import net.minecraft.client.Minecraft;
++import net.minecraft.client.gui.GuiButton;
++import net.minecraft.client.gui.GuiScreen;
++import net.minecraftforge.common.config.ConfigCategory;
++import net.minecraftforge.common.config.ConfigElement;
++import net.minecraftforge.common.config.Configuration;
++
++import biomesoplenty.common.configuration.BOPConfigurationBiomeGen;
++import biomesoplenty.common.configuration.BOPConfigurationBiomeWeights;
++import biomesoplenty.common.configuration.BOPConfigurationIDs;
++import biomesoplenty.common.configuration.BOPConfigurationMain;
++import biomesoplenty.common.configuration.BOPConfigurationMisc;
++import biomesoplenty.common.configuration.BOPConfigurationTerrainGen;
++import biomesoplenty.common.configuration.structures.BOPConfigurationStrongholds;
++import biomesoplenty.common.configuration.structures.BOPConfigurationVillages;
++import biomesoplenty.common.utils.BOPModInfo;
++import cpw.mods.fml.client.IModGuiFactory;
++import cpw.mods.fml.client.config.DummyConfigElement.DummyCategoryElement;
++import cpw.mods.fml.client.config.GuiConfig;
++import cpw.mods.fml.client.config.IConfigElement;
++
++@SuppressWarnings("unused")
++public class GuiFactory implements IModGuiFactory
++{
++	@Override
++	public void initialize(Minecraft minecraftInstance) {}
++
++	@Override
++	public Class<? extends GuiScreen> mainConfigGuiClass()
++	{
++		return ConfigGui.class;
++	}
++
++	@Override
++	public Set<RuntimeOptionCategoryElement> runtimeGuiCategories()
++	{
++		return null;
++	}
++
++	@Override
++	public RuntimeOptionGuiHandler getHandlerFor(RuntimeOptionCategoryElement element)
++	{
++		return null;
++	}
++
++	public static class ConfigGui extends GuiConfig
++	{
++		public ConfigGui(GuiScreen parentScreen)
++		{
++			super(parentScreen, buildRootElements(), BOPModInfo.modID, BOPModInfo.modID, false, false, "Biomes O' Plenty Config");
++		}
++
++		@Override
++		protected void actionPerformed(GuiButton button)
++		{
++			super.actionPerformed(button);
++
++			if (button.id == 2000)
++			{
++				saveAllConfigs();
++			}
++		}
++
++		@SuppressWarnings({ "rawtypes", "unchecked" })
++		private static List<IConfigElement> buildRootElements()
++		{
++			List<IConfigElement> rootElements = new ArrayList<IConfigElement>();
++
++			addFileCategory(rootElements, "Main", BOPConfigurationMain.config);
++			addFileCategory(rootElements, "Misc", BOPConfigurationMisc.config);
++			addFileCategory(rootElements, "Biome Generation", BOPConfigurationBiomeGen.config);
++			addFileCategory(rootElements, "Biome Weights", BOPConfigurationBiomeWeights.config);
++			addFileCategory(rootElements, "Terrain Generation", BOPConfigurationTerrainGen.config);
++			addFileCategory(rootElements, "IDs", BOPConfigurationIDs.config);
++			addFileCategory(rootElements, "Villages", BOPConfigurationVillages.config);
++			addFileCategory(rootElements, "Strongholds", BOPConfigurationStrongholds.config);
++
++			return rootElements;
++		}
++
++		@SuppressWarnings({ "rawtypes", "unchecked" })
++		private static void addFileCategory(List<IConfigElement> rootElements, String displayName, Configuration config)
++		{
++			if (config == null)
++			{
++				return;
++			}
++
++			markCategoriesRequireMcRestart(config);
++
++			List<IConfigElement> childElements = new ArrayList<IConfigElement>();
++			List<String> categoryNames = new ArrayList<String>(config.getCategoryNames());
++			Collections.sort(categoryNames);
++
++			for (String categoryName : categoryNames)
++			{
++				ConfigCategory category = config.getCategory(categoryName);
++				if (category != null && category.showInGui())
++				{
++					childElements.add(new ConfigElement(category));
++				}
++			}
++
++			if (!childElements.isEmpty())
++			{
++				rootElements.add(new DummyCategoryElement(displayName, displayName, childElements).setRequiresMcRestart(true));
++			}
++		}
++
++		private static void markCategoriesRequireMcRestart(Configuration config)
++		{
++			for (String categoryName : config.getCategoryNames())
++			{
++				config.getCategory(categoryName)
++					.setRequiresMcRestart(true);
++			}
++		}
++
++		private static void saveAllConfigs()
++		{
++			save(BOPConfigurationMain.config);
++			save(BOPConfigurationMisc.config);
++			save(BOPConfigurationBiomeGen.config);
++			save(BOPConfigurationBiomeWeights.config);
++			save(BOPConfigurationTerrainGen.config);
++			save(BOPConfigurationIDs.config);
++			save(BOPConfigurationVillages.config);
++			save(BOPConfigurationStrongholds.config);
++		}
++
++		private static void save(Configuration config)
++		{
++			if (config != null && config.hasChanged())
++			{
++				config.save();
++			}
++		}
++	}
 +}
 diff --git upstream/src/main/java/biomesoplenty/common/configuration/BOPConfigurationMain.java workspace/src/main/java/biomesoplenty/common/configuration/BOPConfigurationMain.java
 index 861bcd9c77718c7cc47a907b2e29f8c2e6c46c79..119bda90835c21ecef78c673de778835bc726b32 100644
