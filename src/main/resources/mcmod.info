@@ -4,16 +4,16 @@
     {
       "modid": "${modId}",
       "name": "${modName}",
-      "description": "Applies bspatch-generated runtime patches on top of the official Biomes O' Plenty jar while keeping an editable upstream workspace for development.",
+      "description": "Patch layer for Biomes O' Plenty 1.7.10. Edit against upstream source in dev, ship only a runtime bspatch against the official jar.",
       "version": "${modVersion}",
       "mcversion": "${minecraftVersion}",
-      "url": "",
+      "url": "https://github.com/JackOfNoneTrades/BoP-patches",
       "updateUrl": "",
       "authorList": [
-        "fentanylsolutions"
+        "jack"
       ],
-      "credits": "",
-      "logoFile": "",
+      "credits": "Biomes O' Plenty upstream, GT:NH buildscript.",
+      "logoFile": "assets/${modId}/logo.png",
       "screenshots": [],
       "parent": "",
       "requiredMods": [

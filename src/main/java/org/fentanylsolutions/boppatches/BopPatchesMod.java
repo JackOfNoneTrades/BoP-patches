@@ -14,6 +14,10 @@ import cpw.mods.fml.common.event.FMLPreInitializationEvent;
     name = "BOP Patches",
     version = Tags.VERSION,
     dependencies = "required-after:BiomesOPlenty",
+    customProperties = { @Mod.CustomProperty(k = "license", v = "LGPLv3+SNEED"),
+        @Mod.CustomProperty(k = "issueTrackerUrl", v = "https://github.com/JackOfNoneTrades/BoP-patches/issues"),
+        @Mod.CustomProperty(k = "iconFile", v = "assets/boppatches/logo.png"),
+        @Mod.CustomProperty(k = "backgroundFile", v = "assets/boppatches/background.png") },
     acceptedMinecraftVersions = "[1.7.10]")
 public class BopPatchesMod {
 
