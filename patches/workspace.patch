@@ -41,6 +41,70 @@ index 5409aea6d6703775b33dab8aa21131bf3bcb69cd..1ce7792ba34a9c327e927fc12e49a56d
 -}
 \ No newline at end of file
 +}
+diff --git upstream/src/main/java/biomesoplenty/common/configuration/BOPConfigurationMain.java workspace/src/main/java/biomesoplenty/common/configuration/BOPConfigurationMain.java
+index 861bcd9c77718c7cc47a907b2e29f8c2e6c46c79..119bda90835c21ecef78c673de778835bc726b32 100644
+--- upstream/src/main/java/biomesoplenty/common/configuration/BOPConfigurationMain.java
++++ workspace/src/main/java/biomesoplenty/common/configuration/BOPConfigurationMain.java
+@@ -20,6 +20,7 @@ public class BOPConfigurationMain
+ 	public static boolean spawnGlob;
+ 	public static boolean spawnPhantom;
+ 	public static boolean spawnPixie;
++	public static boolean showWorldTypeWarning;
+ 	public static Property trailsVersion;
+ 
+ 	public static void init(File configFile)
+@@ -38,6 +39,13 @@ public class BOPConfigurationMain
+ 			spawnGlob = config.get("Mob settings", "Spawn Glob", true, null).getBoolean();
+ 			spawnPhantom = config.get("Mob settings", "Spawn Phantom", true, null).getBoolean();
+ 			spawnPixie = config.get("Mob settings", "Spawn Pixie", true, null).getBoolean();
++			showWorldTypeWarning = config
++				.get(
++					"Client settings",
++					"Show world type warning",
++					true,
++					"Show the startup warning that tells players to pick the Biomes O' Plenty world type when opening Create World for the first time.")
++				.getBoolean(true);
+ 			
+ 		}
+ 		catch (Exception e)
+@@ -51,4 +59,4 @@ public class BOPConfigurationMain
+ 			}
+ 		}
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git upstream/src/main/java/biomesoplenty/common/eventhandler/BOPEventHandlers.java workspace/src/main/java/biomesoplenty/common/eventhandler/BOPEventHandlers.java
+index e25500ff0c55f1e8ad3ceb97c82eee18f83b2518..71e68c9e4bbed58791bb5fef9e61a0c35faad9eb 100644
+--- upstream/src/main/java/biomesoplenty/common/eventhandler/BOPEventHandlers.java
++++ workspace/src/main/java/biomesoplenty/common/eventhandler/BOPEventHandlers.java
+@@ -1,6 +1,7 @@
+ package biomesoplenty.common.eventhandler;
+ 
+ import biomesoplenty.client.fog.FogHandler;
++import biomesoplenty.common.configuration.BOPConfigurationMain;
+ import biomesoplenty.common.eventhandler.client.FlowerScatterEventHandler;
+ import biomesoplenty.common.eventhandler.client.gui.MainMenuEventHandler;
+ import biomesoplenty.common.eventhandler.client.gui.WorldTypeMessageEventHandler;
+@@ -66,7 +67,10 @@ public class BOPEventHandlers
+ 	
+ 	private static void registerGUIEventHandlers()
+ 	{
+-	    MinecraftForge.EVENT_BUS.register(WorldTypeMessageEventHandler.instance);
++	    if (BOPConfigurationMain.showWorldTypeWarning)
++	    {
++	        MinecraftForge.EVENT_BUS.register(WorldTypeMessageEventHandler.instance);
++	    }
+ 	    MinecraftForge.EVENT_BUS.register(new MainMenuEventHandler());
+ 	}
+ 	
+@@ -85,4 +89,4 @@ public class BOPEventHandlers
+ 		MinecraftForge.EVENT_BUS.register(new FogHandler());
+ 		FMLCommonHandler.instance().bus().register(new FlowerScatterEventHandler());
+ 	}
+-}
+\ No newline at end of file
++}
 diff --git upstream/src/main/java/biomesoplenty/common/world/WorldChunkManagerBOPEnd.java workspace/src/main/java/biomesoplenty/common/world/WorldChunkManagerBOPEnd.java
 index 5e085c83f5f220cc6d52c09b3e5bf9b05d21a0a4..6b7a19afc96aacd070f634c46d4e5f10c156ee29 100644
 --- upstream/src/main/java/biomesoplenty/common/world/WorldChunkManagerBOPEnd.java
