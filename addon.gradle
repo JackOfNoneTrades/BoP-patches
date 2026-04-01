@@ -1,10 +1,12 @@
 import dev.jack.boppatches.build.BopPatchSettings
 import dev.jack.boppatches.build.BopRuntimePatchSupport
 import dev.jack.boppatches.build.BopWorkspaceSupport
+import org.gradle.api.tasks.Delete
 import org.gradle.api.tasks.bundling.Jar
 
 def bopSettings = BopPatchSettings.from(project)
 def generatedBopDir = layout.buildDirectory.dir("generated/boppatches")
+def bopWorkspaceJarsDir = layout.buildDirectory.dir("bop/workspace-jars")
 def clientRunDir = project.file("run/client").toPath()
 def serverRunDir = project.file("run/server").toPath()
 def obfuscatedRunDir = project.file("run/obfuscated").toPath()
@@ -56,6 +58,7 @@ def bopPatchedJar = tasks.register("bopPatchedJar", Jar) {
     description = "Builds a deobfuscated Biomes O' Plenty workspace jar for dev runs."
     archiveBaseName.set("BiomesOPlenty")
     archiveClassifier.set("workspace-dev")
+    destinationDirectory.set(bopWorkspaceJarsDir)
     from(sourceSets.bopPatched.output)
     preserveFileTimestamps = false
     reproducibleFileOrder = true
@@ -132,6 +135,13 @@ tasks.register("generateBopPatches") {
     }
 }
 
+def cleanLegacyBopWorkspaceJars = tasks.register("cleanLegacyBopWorkspaceJars", Delete) {
+    delete(fileTree(layout.buildDirectory.dir("libs")) {
+        include("BiomesOPlenty-*-workspace-dev.jar")
+        include("BiomesOPlenty-*-workspace-runtime.jar")
+    })
+}
+
 tasks.register("prepareClientBopMods") {
     group = "bop patches"
     description = "Copies the deobfuscated BOP workspace jar into the client run directory."
@@ -204,6 +214,7 @@ tasks.named("processBopPatchedResources").configure {
 
 reobfBopPatchedJar.configure {
     archiveClassifier.set("workspace-runtime")
+    destinationDirectory.set(bopWorkspaceJarsDir)
 }
 
 tasks.matching { it.name.startsWith("runClient") }.configureEach {
@@ -231,7 +242,7 @@ tasks.named("processResources").configure {
 }
 
 tasks.named("jar").configure {
-    dependsOn("generateBopRuntimeArtifacts")
+    dependsOn("generateBopRuntimeArtifacts", cleanLegacyBopWorkspaceJars)
 }
 
 tasks.matching { it.name == "sourcesJar" }.configureEach {
