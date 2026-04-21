@@ -1,9 +1,11 @@
 package org.fentanylsolutions.boppatches.core;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -11,6 +13,10 @@ import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
+import net.minecraft.launchwrapper.Launch;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -22,8 +28,24 @@ public final class BopJarRuntimePatcher {
     private static final Logger LOG = LogManager.getLogger("boppatches-core");
     private static final String PATCH_METADATA_PATH = "boppatches/bop-jar-patch.properties";
     private static final String PATCH_RESOURCE_PATH = "boppatches/bop-jar.patch";
+    private static final String BOP_MOD_ID = "BiomesOPlenty";
 
     private BopJarRuntimePatcher() {}
+
+    public static void patchIfNecessaryEarly() {
+        if (!isRuntimeDeobfuscationEnabledEarly()) {
+            LOG.debug("Skipping early whole-jar BOP patching in the deobfuscated dev environment");
+            return;
+        }
+
+        Path gameDir = toPath(Launch.minecraftHome);
+        if (gameDir == null) {
+            LOG.debug("Launch.minecraftHome is not available yet for early whole-jar BOP patching");
+            return;
+        }
+
+        patchIfNecessary(gameDir);
+    }
 
     public static void patchIfNecessary(Map<String, Object> data) {
         if (!Boolean.TRUE.equals(data.get("runtimeDeobfuscationEnabled"))) {
@@ -31,14 +53,18 @@ public final class BopJarRuntimePatcher {
             return;
         }
 
-        Properties metadata = loadMetadata();
-        if (metadata.isEmpty()) {
+        Path gameDir = toPath(data.get("mcLocation"));
+        if (gameDir == null) {
+            LOG.warn("Could not determine the game directory for runtime BOP patching");
             return;
         }
 
-        Path gameDir = toGameDir(data.get("mcLocation"));
-        if (gameDir == null) {
-            LOG.warn("Could not determine the game directory for runtime BOP patching");
+        patchIfNecessary(gameDir);
+    }
+
+    private static void patchIfNecessary(Path gameDir) {
+        Properties metadata = loadMetadata();
+        if (metadata.isEmpty()) {
             return;
         }
 
@@ -106,6 +132,21 @@ public final class BopJarRuntimePatcher {
         }
     }
 
+    private static boolean isRuntimeDeobfuscationEnabledEarly() {
+        Object blackboardValue = Launch.blackboard == null ? null
+            : Launch.blackboard.get("fml.deobfuscatedEnvironment");
+        if (blackboardValue instanceof Boolean) {
+            return !((Boolean) blackboardValue);
+        }
+
+        String systemProperty = System.getProperty("fml.deobfuscatedEnvironment");
+        if (systemProperty != null) {
+            return !Boolean.parseBoolean(systemProperty);
+        }
+
+        return true;
+    }
+
     private static Properties loadMetadata() {
         Properties properties = new Properties();
         try (InputStream input = BopJarRuntimePatcher.class.getClassLoader()
@@ -121,9 +162,9 @@ public final class BopJarRuntimePatcher {
         }
     }
 
-    private static Path toGameDir(Object mcLocation) {
-        if (mcLocation instanceof java.io.File) {
-            return ((java.io.File) mcLocation).toPath();
+    private static Path toPath(Object location) {
+        if (location instanceof File) {
+            return ((File) location).toPath();
         }
         return null;
     }
@@ -144,11 +185,7 @@ public final class BopJarRuntimePatcher {
             }
             try (Stream<Path> stream = Files.list(root)) {
                 Path fallback = stream.filter(Files::isRegularFile)
-                    .filter(path -> {
-                        String fileName = path.getFileName()
-                            .toString();
-                        return fileName.startsWith("BiomesOPlenty") && fileName.endsWith(".jar");
-                    })
+                    .filter(path -> isBopJar(path, officialJarName))
                     .findFirst()
                     .orElse(null);
                 if (fallback != null) {
@@ -159,6 +196,44 @@ public final class BopJarRuntimePatcher {
             }
         }
         return null;
+    }
+
+    private static boolean isBopJar(Path jarPath, String officialJarName) {
+        String fileName = jarPath.getFileName()
+            .toString();
+        if (!fileName.endsWith(".jar")) {
+            return false;
+        }
+        if (fileName.equals(officialJarName) || fileName.startsWith(jarPrefix(officialJarName))) {
+            return true;
+        }
+
+        try (ZipFile zipFile = new ZipFile(jarPath.toFile())) {
+            return hasBopMcmodInfo(zipFile);
+        } catch (IOException exception) {
+            LOG.debug("Failed to inspect {} while looking for BOP", jarPath, exception);
+            return false;
+        }
+    }
+
+    private static String jarPrefix(String jarName) {
+        int dash = jarName.indexOf('-');
+        int dot = jarName.indexOf('.');
+        int end = dash >= 0 ? dash : dot >= 0 ? dot : jarName.length();
+        return jarName.substring(0, end);
+    }
+
+    private static boolean hasBopMcmodInfo(ZipFile zipFile) throws IOException {
+        ZipEntry mcmodEntry = zipFile.getEntry("mcmod.info");
+        if (mcmodEntry == null) {
+            return false;
+        }
+
+        try (InputStream input = zipFile.getInputStream(mcmodEntry)) {
+            String mcmodInfo = new String(readAllBytes(input), StandardCharsets.UTF_8);
+            return mcmodInfo.contains("\"modid\": \"" + BOP_MOD_ID + "\"")
+                || mcmodInfo.contains("\"modid\":\"" + BOP_MOD_ID + "\"");
+        }
     }
 
     private static void ensureBackup(Path backupJar, byte[] liveBytes, String expectedOriginalHash) throws IOException {

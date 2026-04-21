@@ -190,13 +190,21 @@ public final class BopWorkspaceSupport {
     public static void downloadOfficialJar(Project project) {
         BopPatchSettings settings = BopPatchSettings.from(project);
         Path officialJar = settings.getOfficialJarPath();
-        if (Files.exists(officialJar)) {
-            return;
-        }
         Logger logger = project.getLogger();
-        logger.lifecycle("Downloading official BOP jar from {}", settings.getOfficialJarUrl());
         try {
             Files.createDirectories(officialJar.getParent());
+            if (Files.exists(officialJar)) {
+                if (hasExpectedOfficialJarHash(settings, officialJar)) {
+                    return;
+                }
+                logger.lifecycle(
+                        "Deleting cached official BOP jar {} because its SHA-256 does not match {}",
+                        officialJar,
+                        settings.getOfficialJarSha256());
+                Files.delete(officialJar);
+            }
+
+            logger.lifecycle("Downloading official BOP jar from {}", settings.getOfficialJarUrl());
             HttpURLConnection connection = (HttpURLConnection) URI.create(settings.getOfficialJarUrl()).toURL().openConnection();
             connection.setConnectTimeout(30_000);
             connection.setReadTimeout(30_000);
@@ -211,6 +219,8 @@ public final class BopWorkspaceSupport {
             } finally {
                 connection.disconnect();
             }
+
+            requireExpectedOfficialJarHash(settings, officialJar);
         } catch (IOException exception) {
             throw new GradleException("Failed to download official BOP jar", exception);
         }
@@ -222,9 +232,16 @@ public final class BopWorkspaceSupport {
             Path sourceJar,
             String jarName,
             String managedProjectJarPrefix) {
+        BopPatchSettings settings = BopPatchSettings.from(project);
         ensureWorkspaceExists(project);
         try {
-            replaceBopJar(runDirectory, sourceJar, jarName, managedProjectJarPrefix, true);
+            replaceManagedJar(
+                    runDirectory,
+                    sourceJar,
+                    jarName,
+                    settings.getOfficialJarPrefix(),
+                    managedProjectJarPrefix,
+                    true);
         } catch (IOException exception) {
             throw new GradleException("Failed to prepare run directory for BOP", exception);
         }
@@ -237,10 +254,17 @@ public final class BopWorkspaceSupport {
             Path officialBopJar,
             String officialJarName,
             String managedProjectJarPrefix) {
+        BopPatchSettings settings = BopPatchSettings.from(project);
         ensureWorkspaceExists(project);
         try {
             mirrorModsDirectory(stagedObfuscatedRunDirectory.resolve("mods"), targetRunDirectory.resolve("mods"));
-            replaceBopJar(targetRunDirectory, officialBopJar, officialJarName, managedProjectJarPrefix, false);
+            replaceManagedJar(
+                    targetRunDirectory,
+                    officialBopJar,
+                    officialJarName,
+                    settings.getOfficialJarPrefix(),
+                    managedProjectJarPrefix,
+                    false);
         } catch (IOException exception) {
             throw new GradleException("Failed to prepare the mirrored obfuscated run directory for BOP", exception);
         }
@@ -319,6 +343,24 @@ public final class BopWorkspaceSupport {
     private static void deleteLegacyPatchArtifacts(BopPatchSettings settings) throws IOException {
         deleteRecursively(settings.getPatchDir().resolve("source-overrides"));
         Files.deleteIfExists(settings.getPatchDir().resolve("deletions.txt"));
+    }
+
+    private static boolean hasExpectedOfficialJarHash(BopPatchSettings settings, Path officialJar) throws IOException {
+        String expectedHash = settings.getOfficialJarSha256();
+        return expectedHash.isBlank() || expectedHash.equalsIgnoreCase(sha256(officialJar));
+    }
+
+    private static void requireExpectedOfficialJarHash(BopPatchSettings settings, Path officialJar) throws IOException {
+        String expectedHash = settings.getOfficialJarSha256();
+        if (expectedHash.isBlank()) {
+            return;
+        }
+
+        String actualHash = sha256(officialJar);
+        if (!expectedHash.equalsIgnoreCase(actualHash)) {
+            throw new GradleException(
+                    "Official BOP jar hash mismatch: expected " + expectedHash + " but got " + actualHash);
+        }
     }
 
     private static CommandResult runCommand(Path workingDirectory, List<String> command) {
@@ -496,10 +538,11 @@ public final class BopWorkspaceSupport {
         copyTree(sourceModsDir, targetModsDir);
     }
 
-    private static void replaceBopJar(
+    private static void replaceManagedJar(
             Path runDirectory,
             Path sourceJar,
             String jarName,
+            String officialJarPrefix,
             String managedProjectJarPrefix,
             boolean removeManagedProjectJars) throws IOException {
         Path modsDir = runDirectory.resolve("mods");
@@ -507,11 +550,11 @@ public final class BopWorkspaceSupport {
         try (var stream = Files.list(modsDir)) {
             stream.filter(path -> {
                         String fileName = path.getFileName().toString();
-                        boolean matchesBopJar = fileName.startsWith("BiomesOPlenty") && fileName.endsWith(".jar");
+                        boolean matchesOfficialJar = fileName.startsWith(officialJarPrefix) && fileName.endsWith(".jar");
                         boolean matchesManagedProjectJar = removeManagedProjectJars
                                 && fileName.startsWith(managedProjectJarPrefix)
                                 && fileName.endsWith(".jar");
-                        return matchesBopJar || matchesManagedProjectJar;
+                        return matchesOfficialJar || matchesManagedProjectJar;
                     })
                     .forEach(BopWorkspaceSupport::deleteRecursively);
         }

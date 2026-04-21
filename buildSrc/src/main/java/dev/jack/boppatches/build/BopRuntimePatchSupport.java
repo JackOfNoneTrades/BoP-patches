@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Enumeration;
@@ -53,11 +54,9 @@ public final class BopRuntimePatchSupport {
             Files.createDirectories(artifactsDir);
 
             BopWorkspaceDiff workspaceDiff = BopWorkspaceSupport.diffWorkspace(project);
-            RuntimeJarResult runtimeJarResult = buildRuntimeTargetJar(
-                    settings.getOfficialJarPath(),
-                    reobfWorkspaceJar,
-                    runtimeTargetJar,
-                    workspaceDiff);
+            RuntimeJarResult runtimeJarResult = hasWorkspaceChanges(workspaceDiff)
+                    ? buildRuntimeTargetJar(settings.getOfficialJarPath(), reobfWorkspaceJar, runtimeTargetJar, workspaceDiff)
+                    : copyOfficialJar(settings.getOfficialJarPath(), runtimeTargetJar);
             byte[] oldBytes = Files.readAllBytes(settings.getOfficialJarPath());
             byte[] newBytes = Files.readAllBytes(runtimeTargetJar);
             byte[] patchBytes = diff(oldBytes, newBytes);
@@ -158,6 +157,11 @@ public final class BopRuntimePatchSupport {
         return new RuntimeJarResult(overlaidClassEntries, overlaidResourceEntries, deletedEntries);
     }
 
+    private static RuntimeJarResult copyOfficialJar(Path officialJarPath, Path runtimeTargetJarPath) throws IOException {
+        Files.copy(officialJarPath, runtimeTargetJarPath, StandardCopyOption.REPLACE_EXISTING);
+        return new RuntimeJarResult(0, 0, 0);
+    }
+
     private static Map<String, ZipEntryWithBytes> loadZipEntries(Path jarPath) throws IOException {
         Map<String, ZipEntryWithBytes> entries = new TreeMap<>();
         try (ZipFile zipFile = new ZipFile(jarPath.toFile())) {
@@ -247,6 +251,13 @@ public final class BopRuntimePatchSupport {
     private static boolean matchesClassPrefix(String entryPath, String classPrefix) {
         return entryPath.equals(classPrefix + ".class")
                 || (entryPath.startsWith(classPrefix + "$") && entryPath.endsWith(".class"));
+    }
+
+    private static boolean hasWorkspaceChanges(BopWorkspaceDiff workspaceDiff) {
+        return !workspaceDiff.getOverlayClassPrefixes().isEmpty()
+                || !workspaceDiff.getDeletedClassPrefixes().isEmpty()
+                || !workspaceDiff.getOverlayResources().isEmpty()
+                || !workspaceDiff.getDeletedResources().isEmpty();
     }
 
     private static void writeZipEntry(ZipOutputStream output, String entryPath, byte[] bytes, ZipEntry template)

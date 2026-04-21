@@ -12,6 +12,8 @@ public final class BopPatchSettings {
     public static final String DEFAULT_OFFICIAL_JAR_URL =
             "https://cdn.modrinth.com/data/HXF82T3G/versions/YoWpRk0h/BiomesOPlenty-1.7.10-2.1.0.2308-universal.jar";
     public static final String DEFAULT_OFFICIAL_JAR_NAME = "BiomesOPlenty-1.7.10-2.1.0.2308-universal.jar";
+    public static final String DEFAULT_OFFICIAL_JAR_SHA256 =
+            "5382d1c156c871c896b6cebd036b80f58ceaff36b09d416b113f32884b7b4a2a";
 
     private static final List<String> JAVA_WORKSPACE_ROOTS = List.of("src/main/java", "src/api/java");
     private static final List<String> RESOURCE_WORKSPACE_ROOTS = List.of("src/main/resources");
@@ -22,18 +24,21 @@ public final class BopPatchSettings {
     private final String upstreamBranch;
     private final String officialJarUrl;
     private final String officialJarName;
+    private final String officialJarSha256;
 
     private BopPatchSettings(
             Path projectDir,
             String upstreamUrl,
             String upstreamBranch,
             String officialJarUrl,
-            String officialJarName) {
+            String officialJarName,
+            String officialJarSha256) {
         this.projectDir = projectDir;
         this.upstreamUrl = upstreamUrl;
         this.upstreamBranch = upstreamBranch;
         this.officialJarUrl = officialJarUrl;
         this.officialJarName = officialJarName;
+        this.officialJarSha256 = officialJarSha256;
     }
 
     public static BopPatchSettings from(Project project) {
@@ -42,7 +47,14 @@ public final class BopPatchSettings {
         String upstreamBranch = stringProperty(project, "bopUpstreamBranch", DEFAULT_UPSTREAM_BRANCH);
         String officialJarUrl = stringProperty(project, "bopOfficialJarUrl", DEFAULT_OFFICIAL_JAR_URL);
         String officialJarName = stringProperty(project, "bopOfficialJarName", DEFAULT_OFFICIAL_JAR_NAME);
-        return new BopPatchSettings(projectDir, upstreamUrl, upstreamBranch, officialJarUrl, officialJarName);
+        String officialJarSha256 = stringProperty(project, "bopOfficialJarSha256", DEFAULT_OFFICIAL_JAR_SHA256);
+        return new BopPatchSettings(
+                projectDir,
+                upstreamUrl,
+                upstreamBranch,
+                officialJarUrl,
+                officialJarName,
+                officialJarSha256);
     }
 
     private static String stringProperty(Project project, String name, String defaultValue) {
@@ -68,6 +80,17 @@ public final class BopPatchSettings {
 
     public String getOfficialJarName() {
         return officialJarName;
+    }
+
+    public String getOfficialJarSha256() {
+        return officialJarSha256;
+    }
+
+    public String getOfficialJarPrefix() {
+        int dash = officialJarName.indexOf('-');
+        int dot = officialJarName.indexOf('.');
+        int end = dash >= 0 ? dash : dot >= 0 ? dot : officialJarName.length();
+        return officialJarName.substring(0, end);
     }
 
     public List<String> getWorkspaceRoots() {

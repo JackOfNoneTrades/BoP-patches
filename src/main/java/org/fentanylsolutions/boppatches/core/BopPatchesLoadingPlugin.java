@@ -6,8 +6,13 @@ import cpw.mods.fml.relauncher.IFMLLoadingPlugin;
 
 @IFMLLoadingPlugin.Name("BOP Patches Core")
 @IFMLLoadingPlugin.MCVersion("1.7.10")
+@IFMLLoadingPlugin.SortingIndex(-1000)
 @IFMLLoadingPlugin.TransformerExclusions({ "org.fentanylsolutions.boppatches.core." })
 public class BopPatchesLoadingPlugin implements IFMLLoadingPlugin {
+
+    public BopPatchesLoadingPlugin() {
+        BopJarRuntimePatcher.patchIfNecessaryEarly();
+    }
 
     @Override
     public String[] getASMTransformerClass() {
